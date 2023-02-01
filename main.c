@@ -2,74 +2,100 @@
 
 #include <libavformat/avformat.h>
 #include <libavutil/dict.h>
+#include <libavutil/opt.h>
 #include "libavcodec/avcodec.h"
 #include<libavdevice/avdevice.h>
 
-#define YUV_FILE_PATH "/Users/dev/Documents/Android_work/main_ffmpeg/1_ffmpeg_env/yuv_file/akiyo_qcif.yuv"
-#define Y_FILE_PATH "/Users/dev/Documents/Android_work/main_ffmpeg/1_ffmpeg_env/yuv_file/yuv420_y.y"
-#define U_FILE_PATH "/Users/dev/Documents/Android_work/main_ffmpeg/1_ffmpeg_env/yuv_file/yuv420_u.y"
-#define V_FILE_PATH "/Users/dev/Documents/Android_work/main_ffmpeg/1_ffmpeg_env/yuv_file/yuv420_v.y"
+enum openVideoType {
+    LOCAL,
+    WEBSITE
+};
 
-void yuv420(const char *path, int width, int height);
+#define  video_path  "/Users/dev/Desktop/mp4/零一九零贰 - 忘川彼岸 (DJ名龙版)【動態歌詞_pīn yīn gē cí】抖音一夜之间火了.mp4"
+// 苹果提供的测试源
+#define rtmp_web_video_url "http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8"
+int ret = -1;
+
+void test_ffmpeg_env();
+
+int open_web_video();
+
+int open_local_video();
+
+// 打开视频源类型
+enum openVideoType openType = LOCAL;
+
+// Q: pFormat 不用显示声明吗？
+AVFormatContext *pFormat = NULL;
+
+void InitLibAvFormat();
+
 
 int main(int argc, char **argv) {
-    yuv420(YUV_FILE_PATH, 176, 144);
+    test_ffmpeg_env();
+    // step 1: 初始化
+    InitLibAvFormat();
 
+    // step 2: 打开源文件
+    if (openType == LOCAL) {
+        open_local_video();
+    } else if (openType == WEBSITE) {
+        open_web_video();
+    }
+
+    // step 3:寻找解码器信息
+    ret = avformat_find_stream_info(pFormat, NULL);
+    if (ret) {
+        fprintf(stderr, "step 3 : avformat_find_stream_info failed. \n");
+        return -1;
+    }
+    fprintf(stdout, "step 3 : avformat_find_stream_info success. \n");
+    int time = pFormat->duration;
+    int video_minutes_time = time / 1000000 / 60;
+    int video_seconds_time = time / 1000000 % 60;
+    fprintf(stdout, "   video_minutes_time   : %d minutes \n", video_minutes_time);
+    fprintf(stdout, "   video_seconds_time   : %d seconds\n", video_seconds_time);
+
+    // step 4:寻找解码器
     return 0;
 }
 
-/**
- * 像素的呈现方式 ： yuv = rgb;
- * 数据类型：
- * 1： 普通类型；
- * 2： 矩阵类型：mat
- * 3： 原组类型：vec3 ,vec4 : 三元组，四元组；
- * @param path
- * @param width
- * @param height
- */
-void yuv420(const char *path, int width, int height) {
-    // 打开
-    FILE *fp = fopen(path, "rb+");
-    if (fp == NULL) {
-        fprintf(stderr, "the yuv file is null");
-        return;
-    }
-    FILE *f1 = fopen(Y_FILE_PATH, "wb+");
-    FILE *f2 = fopen(U_FILE_PATH, "wb+");
-    FILE *f3 = fopen(V_FILE_PATH, "wb+");
+void InitLibAvFormat() {
+    // step 1:
+    av_register_all();
+    fprintf(stdout, "step 1 : av_register_all success. \n");
+}
 
 
-    if (f1 == NULL) {
-        fprintf(stderr, "the f1 file is null");
-    }
-    if (f2 == NULL) {
-        fprintf(stderr, "the f2 file is null");
-    }
-    if (f3 == NULL) {
-        fprintf(stderr, "the f3 file is null");
-    }
+void test_ffmpeg_env() {
+    printf("ffmpeg_env--> avcodec_configuration\n %s: \n", avcodec_configuration());
+    printf("----------------------------------------------------------------↓\n");
+}
 
-
-    unsigned char *p = malloc(width * height * 3 / 2);
-    int i = 0;
-    int item = width * height;
-    while (i < 1) {
-        fread(p, 1, item * 3 / 2, fp);
-        // y 亮度
-        fwrite(p, 1, item, f1);
-        // u 颜色
-        fwrite(p + item, 1, item / 4, f2);
-        // v 颜色
-        fwrite(p + item * (1 + 1 / 4), 1, item / 4, f3);
-        i++;
+int open_web_video() {
+    avformat_network_init();
+    AVDictionary *opt = NULL;
+    av_dict_set(&opt, "rtsp_transport", "tcp", 0);
+    // 时间延迟
+    av_dict_set(&opt, "max_delay", "5500", 0);
+    int open_web_video_result = avformat_open_input(&pFormat, rtmp_web_video_url, NULL, &opt);
+    if (open_web_video_result) {
+        fprintf(stderr, "open web video input stream in failure\n");
+        return -1;
     }
-    free(p);
-    p = NULL;
-    fclose(fp);
-    fclose(f1);
-    fclose(f2);
-    fclose(f3);
-
+    fprintf(stdout, "open web video input stream in success\n");
 
 }
+
+int open_local_video() {
+    // step 2:
+    ret = avformat_open_input(&pFormat, video_path, NULL, NULL);
+    if (ret) {
+        fprintf(stderr, "step 2 : avformat_open_input failed. \n");
+        return -1;
+    }
+    fprintf(stdout, "step 2 : avformat_open_input success. \n");
+    // 打印本地视频流信息
+    av_dump_format(pFormat, 0, video_path, 0);
+}
+
